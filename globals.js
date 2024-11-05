@@ -38,6 +38,15 @@ let totalIntensityScore = 0;
 let notePressedCount = 0;
 let notePressedCountHistory = [];
 
+// 音量相關的全域變數
+let velocities = new Array(128).fill(0); // 儲存每個音符的當前音量
+let velocityDecayRate = 0.98; // 調整衰減速率
+let maxVelocityHeight = 40; // 調整最大高度
+let peakVelocities = new Array(128).fill(0); // 儲存每個音符的最大音量
+let peakHoldTime = new Array(128).fill(0); // 儲存最大音量的持續時間
+const PEAK_HOLD_FRAMES = 180; // 3 秒 = 60 幀/秒 × 3 秒
+let displayVelocity = false; // 改為預設關閉
+
 WebMidi.enable(function (err) { //check if WebMidi.js is enabled
     if (err) {
         console.log("WebMidi could not be enabled.", err);
@@ -91,11 +100,15 @@ function noteOn(pitch, velocity) {
     totalNotesPlayed++;
     notesThisFrame++;
     totalIntensityScore += velocity;
+
+    // 更新按鍵音量和最大音量線
+    velocities[pitch] = velocity;
+    peakVelocities[pitch] = velocity;
+    peakHoldTime[pitch] = PEAK_HOLD_FRAMES;
     
-    // piano visualizer
     isKeyOn[pitch] = 1;
     if (nowPedaling) {
-      isPedaled[pitch] = 1;
+        isPedaled[pitch] = 1;
     }
 }
 
@@ -146,4 +159,8 @@ function changeColor() {
     darkenedColor = keyOnColor.levels.map(x => floor(x * .7));
     pedaledColor = color(`rgb(${darkenedColor[0]}, ${darkenedColor[1]}, ${darkenedColor[2]})`)
     console.log(pedaledColor.levels);
+}
+
+function toggleDisplayVelocity(cb) {
+    displayVelocity = cb.checked;
 }

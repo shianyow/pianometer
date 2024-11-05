@@ -1,5 +1,5 @@
 function setup() {
-  createCanvas(1098, 118).parent('piano-visualizer');
+  createCanvas(1098, 210).parent('piano-visualizer');
   colorMode(HSB, 360, 100, 100, 100);
   keyOnColor = color(326, 100, 100, 100); // <---- 編輯這裡換「按下時」的顏色！[HSB Color Mode] 
   pedaledColor = color(326, 100, 70, 100); // <---- 編輯這裡換「踏板踩住」的顏色！[HSB Color Mode]
@@ -12,8 +12,18 @@ function setup() {
 function draw() {
   background(0, 0, 20, 100);
   pushHistories();
+  
+  // 將所有元素往下移動固定距離，給音量條預留空間
+  translate(0, 90); // 改為固定往下移動 90
+  
   drawWhiteKeys();
   drawBlackKeys();
+  
+  updateVelocities();  
+  if (displayVelocity) {
+    drawVelocityBars();
+  }
+  
   if (displayNoteNames) {drawNoteNames();};
   drawTexts();
 }
@@ -273,3 +283,113 @@ function mouseClicked() {
   }
   console.log(mouseX, mouseY);
 }
+
+function drawVelocityBars() {
+  // 輔助函數：計算x和寬度
+  function getKeyPosition(i, wIndex) {
+    const isBlackKey = isBlack[i % 12] > 0;
+    if (!isBlackKey) {
+      return {
+        x: border + wIndex * (whiteKeyWidth + whiteKeySpace),
+        width: whiteKeyWidth
+      };
+    }
+    return {
+      x: border + (wIndex - 1) * (whiteKeyWidth + whiteKeySpace) + isBlack[i % 12],
+      width: blackKeyWidth
+    };
+  }
+
+  // 輔助函數：繪製單個音量條
+  function drawBar(x, width, y, color) {
+    noStroke();
+    fill(color);
+    rect(x, y, width, 2);
+  }
+
+  // 輔助函數：計算y位置
+  function getYPosition(value, isMaxLine = false) {
+    const multiplier = isMaxLine ? Math.ceil(value * 10) : (value + 1);
+    return keyAreaY - multiplier * (maxVelocityHeight * 2 / 10);
+  }
+
+  // 輔助函數：繪製音量條（當前音量或最大音量）
+  function drawVelocityBars(isBlackKey, isPeak = false) {
+    let wIndex = 0;
+    for (let i = 21; i < 109; i++) {
+      const velocityValue = isPeak ? peakVelocities[i] : velocities[i];
+
+      if (velocityValue > 0 && (isBlack[i % 12] > 0 === isBlackKey)) {
+        const { x, width } = getKeyPosition(i, wIndex);
+
+        // 根據是否為最大音量線和黑白鍵來決定顏色
+        const barColor = isBlackKey ? 
+          color(120, 90, isPeak ? 85 : 60, isPeak ? 100 : 90) :  // 黑鍵顏色
+          color(120, 90, isPeak ? 100 : 75, isPeak ? 100 : 90);  // 白鍵顏色
+
+        if (isPeak) {
+          // 繪製最大音量線
+          drawBar(x, width, getYPosition(velocityValue, true), barColor);
+        } else {
+          // 繪製當前音量條
+          for (let j = 0; j < Math.ceil(velocityValue * 10); j++) {
+            drawBar(x, width, getYPosition(j), barColor);
+          }
+        }
+      }
+      if (!isBlack[i % 12]) wIndex++;
+    }
+  }
+
+  // 1. 繪製背景刻度
+  let wIndex = 0;
+  for (let i = 21; i < 109; i++) {
+    if (velocities[i] > 0 || peakVelocities[i] > 0) {
+      const { x, width } = getKeyPosition(i, wIndex);
+      for (let j = 0; j < 10; j++) {
+        drawBar(x, width, getYPosition(j), color(0, 0, 50, 30));
+      }
+    }
+    if (!isBlack[i % 12]) wIndex++;
+  }
+
+  // 2. 繪製當前音量（白鍵）
+  drawVelocityBars(false, false);
+
+  // 3. 繪製當前音量（黑鍵）
+  drawVelocityBars(true, false);
+
+  // 4. 繪製最大音量線（白鍵）
+  drawVelocityBars(false, true);
+
+  // 5. 繪製最大音量線（黑鍵）
+  drawVelocityBars(true, true);
+}
+
+function updateVelocities() {
+  for (let i = 0; i < velocities.length; i++) {
+    if (velocities[i] > 0) {
+      // 按鍵放開且沒有踩踏板時，快速降低音量
+      if (!isKeyOn[i] && !isPedaled[i]) {
+        velocities[i] *= 0.5; // 快速衰減
+      } else {
+        velocities[i] *= 0.995; // 按著或踩踏板時的緩慢衰減
+      }
+      
+      // 如果音量太小就設為 0
+      if (velocities[i] < 0.01) {
+        velocities[i] = 0;
+      }
+    }
+    
+    // 遞減最大音量線的保持時間
+    if (peakHoldTime[i] > 0) {
+      peakHoldTime[i]--;
+    }
+    // 當保持時間結束，且既沒有按著鍵也沒有踩踏板時，清除最大音量線
+    if (peakHoldTime[i] <= 0 && !isKeyOn[i] && !isPedaled[i]) {
+      peakVelocities[i] = 0;
+    }
+  }
+}
+
